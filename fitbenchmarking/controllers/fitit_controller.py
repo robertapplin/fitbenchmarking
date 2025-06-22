@@ -2,7 +2,8 @@ import numpy as np
 
 from fitbenchmarking.controllers.base_controller import Controller
 
-from fitit import fit, minimizers, Minimizer, Model
+from fitit import fit, minimizers, CostFunction, Minimizer, Model
+from fitit.models import Gaussian
 from fitit.cost_functions import ChiSquared
 from fitit.framework.inspect import get_class_from_module
 
@@ -72,13 +73,32 @@ class FitItController(Controller):
                 return self.problem.eval_model(x=x, params=parameters)
 
             def evaluate_jacobian(model_self, x, parameters):
+                print("HERE")
+                print(self.problem.jacobian)
                 return self.problem.jacobian(x, parameters)
 
             def number_of_parameters(model_self) -> int:
                 return len(self.initial_params)
 
-        self._fitit_model = DerivedModel()
-        self._fitit_cost_function = ChiSquared() # Not finished
+
+        class DerivedCF(CostFunction):
+            def evaluate(cf_self, x, y, e, parameters, model):
+                residuals = self.cost_func.eval_r(parameters, x=x, y=y, e=e)
+                return sum(residuals**2)
+
+            def derivative(cf_self, x, y, e, parameters, model):
+                residual = y - self.problem.eval_model(x=x, params=parameters)
+                jac_res = self.cost_func.jac_res(parameters, e=e)
+                return 2 * jac_res.T @ residual
+
+            def weight_matrix(self, x, e):
+                assert e is not None, "Chi Squared requires y errors to be provided for the weighting"
+                assert np.all(e > 0), "Chi Squared requires all errors to be positive to avoid division by zero"
+
+                return np.diag(1.0 / e ** 2)
+
+        self._fitit_model = Gaussian()#DerivedModel()
+        self._fitit_cost_function = DerivedCF() # Not finished
         if self.minimizer is not None:
             self._fitit_minimizer = get_class_from_module(minimizers, Minimizer, self.minimizer)()
 
