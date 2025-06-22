@@ -3,7 +3,7 @@ import numpy as np
 from fitbenchmarking.controllers.base_controller import Controller
 
 from fitit import fit, minimizers, Minimizer, Model
-from fitit.cost_functions import MeanSquaredError
+from fitit.cost_functions import ChiSquared
 from fitit.framework.inspect import get_class_from_module
 
 
@@ -55,6 +55,8 @@ class FitItController(Controller):
         self._fitit_cost_function = None
         self._fitit_minimizer = None
 
+        self._fit_range = None
+
         self._evaluator = None
         self._exit_code = None
 
@@ -62,6 +64,9 @@ class FitItController(Controller):
         """
         Setup problem ready to run with FitIt.
         """
+        if self.problem.start_x is not None and self.problem.end_x is not None:
+            self._fit_range = [self.problem.start_x, self.problem.end_x]
+
         class DerivedModel(Model):
             def evaluate(model_self, x, parameters):
                 return self.problem.eval_model(x=x, params=parameters)
@@ -73,7 +78,7 @@ class FitItController(Controller):
                 return len(self.initial_params)
 
         self._fitit_model = DerivedModel()
-        self._fitit_cost_function = MeanSquaredError() # Not finished
+        self._fitit_cost_function = ChiSquared() # Not finished
         if self.minimizer is not None:
             self._fitit_minimizer = get_class_from_module(minimizers, Minimizer, self.minimizer)()
 
@@ -88,7 +93,8 @@ class FitItController(Controller):
             e=self.data_e,
             cost_function=self._fitit_cost_function,
             start_parameters=self.initial_params,
-            minimizer=self._fitit_minimizer
+            minimizer=self._fitit_minimizer,
+            fit_range=self._fit_range
         )
 
         self._evaluator = evaluator
@@ -103,4 +109,5 @@ class FitItController(Controller):
         else:
             self.flag = 2
 
-        self.final_params = self._evaluator.final_parameters()
+        if self._evaluator is not None:
+            self.final_params = self._evaluator.final_parameters()
